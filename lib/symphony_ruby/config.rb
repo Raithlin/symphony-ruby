@@ -62,8 +62,8 @@ module SymphonyRuby
       @hooks = Hooks.new(after_create: hooks_raw[:after_create])
       chat_raw = @raw[:chat] || {}
       @chat = Chat.new(
-        discord: symbolize(chat_raw[:discord])&.transform_values { |v| resolve_env(v.to_s) },
-        telegram: symbolize(chat_raw[:telegram])&.transform_values { |v| resolve_env(v.to_s) }
+        discord: resolve_chat_values(symbolize(chat_raw[:discord])),
+        telegram: resolve_chat_values(symbolize(chat_raw[:telegram]))
       ) if chat_raw.any?
       @chat ||= Chat.new(discord: nil, telegram: nil)
       @poll_interval = Integer(@raw.fetch(:poll_interval, 1))
@@ -129,6 +129,24 @@ module SymphonyRuby
       return ENV.fetch(text[1..], "") if text.start_with?("$") && text.match?(/\A\$[A-Z0-9_]+\z/)
 
       text.gsub(/\$([A-Z0-9_]+)/) { ENV.fetch(Regexp.last_match(1), "") }
+    end
+
+    def resolve_chat_values(hash)
+      return nil if hash.nil?
+
+      hash.to_h do |key, val|
+        resolved = case val
+                   when Array then val.map { |v| resolve_scalar(v) }
+                   else resolve_scalar(val)
+                   end
+        [key, resolved]
+      end
+    end
+
+    def resolve_scalar(value)
+      return value if value.nil?
+
+      resolve_env(value.to_s)
     end
 
     def resolve_token(value)

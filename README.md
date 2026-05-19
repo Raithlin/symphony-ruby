@@ -1,8 +1,8 @@
 # Symphony Ruby for NomadNest
 
-Ruby Symphony-like orchestrator that uses **GitHub Projects v2** as the ticket source and launches **configurable agent commands**. It is intentionally provider/model agnostic: use Codex, Claude, Gemini, local models, or any wrapper script as long as it can be invoked from a shell command.
+Ruby Symphony-like orchestrator that uses **GitHub Projects v2** as the ticket source and launches **configurable agent commands**. It is intentionally provider/model agnostic: use Codex, Claude, Gemini, Pi, OpenCode, local models, or any wrapper script as long as it can be invoked from a shell command.
 
-This project is based on the workflow shape described by OpenAI Symphony Elixir: poll a tracker, create a workspace per ticket, render a workflow prompt, launch an agent, and keep orchestration configuration in `WORKFLOW.md`.
+This project is based on the workflow shape described by [OpenAI Symphony](https://github.com/openai/symphony) (Elixir): poll a tracker, create a workspace per ticket, render a workflow prompt, launch an agent, and keep orchestration configuration in `WORKFLOW.md`.
 
 ## How it works
 
@@ -32,6 +32,12 @@ cd /home/stephen/source/symphony-ruby
 bundle install
 gh auth status
 bin/symphony-ruby ./WORKFLOW.md --once
+```
+
+To run as a Discord bot instead:
+
+```bash
+bin/symphony-ruby --bot discord
 ```
 
 If `gh auth status` fails, authenticate first:
@@ -130,9 +136,12 @@ agent:
     EXTRA_FLAG: enabled
 poll_interval: 30
 chat:
-  # Optional: Discord and/or Telegram notifications
+  # Optional: Discord bot and/or Telegram notifications
   discord:
-    webhook_url: $DISCORD_WEBHOOK_URL
+    bot_token: $DISCORD_BOT_TOKEN
+    channel_id: "1234567890"
+    # Optional: restrict slash commands to these role IDs
+    allowed_role_ids: ["9876543210"]
   telegram:
     bot_token: $TELEGRAM_BOT_TOKEN
     chat_id: "-1001234567890"
@@ -171,21 +180,21 @@ The orchestrator does not know about model APIs. It passes these variables to an
 - `SYMPHONY_TICKET_URL`
 - `SYMPHONY_TICKET_REPOSITORY`
 
-Examples:
+### Supported agent applications
 
-Pi with DeepSeek:
+Symphony Ruby works with any CLI agent that reads a prompt file and respects `$SYMPHONY_*` environment variables. Below are examples for common coding agents.
+
+**Pi** (coding agent harness):
 
 ```yaml
+# DeepSeek (direct)
 agent:
   provider: deepseek
   model: deepseek-v4-pro
   command: |
     pi --provider "$SYMPHONY_PROVIDER" --model "$SYMPHONY_MODEL" --session-dir "$SYMPHONY_WORKSPACE/.pi-sessions" -p @"$SYMPHONY_PROMPT_FILE"
-```
 
-Pi with an OpenRouter DeepSeek model:
-
-```yaml
+# DeepSeek via OpenRouter
 agent:
   provider: openrouter
   model: deepseek/deepseek-v4-pro
@@ -193,12 +202,34 @@ agent:
     pi --provider "$SYMPHONY_PROVIDER" --model "$SYMPHONY_MODEL" --session-dir "$SYMPHONY_WORKSPACE/.pi-sessions" -p @"$SYMPHONY_PROMPT_FILE"
 ```
 
+**Claude Code** (Anthropic's CLI agent):
+
 ```yaml
 agent:
   provider: anthropic
   model: claude-sonnet-4-5
-  command: claude --model "$SYMPHONY_MODEL" < "$SYMPHONY_PROMPT_FILE"
+  command: claude --model "$SYMPHONY_MODEL" -p @"$SYMPHONY_PROMPT_FILE"
 ```
+
+**Codex** (OpenAI's CLI agent):
+
+```yaml
+agent:
+  provider: openai
+  model: gpt-5
+  command: codex exec -m "$SYMPHONY_MODEL" < "$SYMPHONY_PROMPT_FILE"
+```
+
+**opencode** (terminal coding agent):
+
+```yaml
+agent:
+  provider: anthropic
+  model: claude-sonnet-4-5
+  command: opencode -m "$SYMPHONY_MODEL" -p @"$SYMPHONY_PROMPT_FILE"
+```
+
+**Custom / local models:**
 
 ```yaml
 agent:
@@ -229,37 +260,69 @@ If both `github.token`/`GITHUB_TOKEN` and `gh auth token` are unavailable, live 
 rake test
 ```
 
-### Chat notifications (optional)
+### Discord bot (optional)
 
-Symphony Ruby can send notifications to Discord and/or Telegram when tickets are claimed, agents start/finish, and PRs are created.
+Symphony Ruby can run as a Discord bot, accepting slash commands and posting notifications to a configured channel.
 
-Add a `chat:` section to `WORKFLOW.md`:
+**Setup:**
+
+1. Create a Discord application + bot at https://discord.com/developers/applications
+2. Go to **Bot** → **Reset Token** and copy the token
+3. Enable **Developer Mode** in Discord, right-click your target channel → **Copy ID**
+4. (Optional) Copy role IDs the same way if you want to restrict commands
+5. Invite the bot to your server with scopes `bot` + `applications.commands` and permissions `Send Messages`, `Embed Links`, `Use Slash Commands`
+
+**Configuration:**
 
 ```yaml
 chat:
   discord:
-    webhook_url: $DISCORD_WEBHOOK_URL
+    bot_token: $DISCORD_BOT_TOKEN
+    channel_id: "1234567890"
+    allowed_role_ids: ["9876543210"]  # optional
+```
+
+**Running:**
+
+```bash
+export DISCORD_BOT_TOKEN=your_token_here
+bin/symphony-ruby --bot discord
+```
+
+The bot runs persistently, listening for commands and sending notifications to the configured channel.
+
+**Slash commands:**
+| Command | What it does |
+|---------|-------------|
+| `/symphony run` | Polls GitHub for ready tickets and runs the orchestrator |
+| `/symphony status` | Shows current owner, project, provider/model, channel |
+| `/symphony review` | Lists open PRs matching the configured `pr_label` |
+
+If `allowed_role_ids` is configured, only users with at least one matching role can use these commands.
+
+**Notifications:**
+| Event | Discord message |
+|-------|----------------|
+| Ticket claimed | Rich embed with 🎫 title, repo, status |
+| Agent started | "🚀 Agent started for #42: Title" |
+| Agent finished | ✅ Green embed or ❌ Red embed with output |
+| PR created | "🔀 PR for #42: url" |
+| Error | ⚠️ Yellow embed with error message |
+| No ready tickets | "💤 No ready tickets found" |
+
+### Telegram (optional, coming next)
+
+Telegram bot support uses the same `ChatAdapter` interface. Configure it with a bot token and chat ID:
+
+```yaml
+chat:
   telegram:
     bot_token: $TELEGRAM_BOT_TOKEN
     chat_id: "-1001234567890"
+    allowed_user_ids: ["123456789"]  # optional
 ```
 
-Discord uses webhooks (one URL per channel). Telegram uses a bot token and chat ID. Both can be configured simultaneously, or just one. Omit the entire `chat:` section to run without notifications.
-
-**Environment variables:**
-- `DISCORD_WEBHOOK_URL` — Discord webhook URL (from Server Settings → Integrations → Webhooks)
-- `TELEGRAM_BOT_TOKEN` — Telegram bot token (from @BotFather)
-
-**Notification flow:**
-| Event | What's sent |
-|-------|------------|
-| Ticket claimed | Rich embed with title, repo, status |
-| Agent started | "🚀 Agent started for #42" |
-| Agent finished | ✅ or ❌ with last 10 lines of output |
-| PR created | "🔀 PR for #42: link" |
-| No ready tickets | "💤 No ready tickets found" |
-
-**Coming next:** Implementations for `DiscordAdapter` (webhook-based) and `TelegramAdapter` (bot API). The common `ChatAdapter` interface is ready — these adapters just need to implement `send_message` and `send_rich_message`.
+**Coming next:** `TelegramBot` adapter implementing the same command + notification model as Discord.
 
 ## Current scope
 
@@ -269,4 +332,6 @@ Discord uses webhooks (one URL per channel). Telegram uses a bot token and chat 
 - Runs commands locally in per-ticket workspaces.
 - Optional: when `agent.pr_label` is configured and the ticket has that label, commits, creates a branch, pushes, and opens a PR via `gh pr create`.
 - Draft issues without an assignable content id are still moved to `In Progress`, but assignment is skipped.
+- Discord bot with slash commands (`/symphony run`, `/symphony status`, `/symphony review`) and notification embeds.
+- Chat adapter interface for adding new platforms (Telegram, Slack, etc.).
 
