@@ -2,10 +2,11 @@
 
 module SymphonyRuby
   class Orchestrator
-    def initialize(config:, tracker: GithubProjectsTracker.new(config: config), logger: $stdout)
+    def initialize(config:, tracker: GithubProjectsTracker.new(config: config), logger: $stdout, chat_adapter: nil)
       @config = config
       @tracker = tracker
       @logger = logger
+      @chat_adapter = chat_adapter || ChatAdapter.new(logger: logger)
     end
 
     def run_once
@@ -54,8 +55,11 @@ module SymphonyRuby
       File.write(prompt_file, @config.render_prompt(ticket: ticket))
       trace "Prompt: #{prompt_file}"
       @tracker.mark_in_progress(ticket)
+      @chat_adapter.ticket_claimed(ticket)
+      @chat_adapter.agent_started(ticket)
       trace "Launching agent for #{ticket.identifier}"
       run_shell(@config.agent.command, workspace, env)
+      @chat_adapter.agent_finished(ticket, true, "Agent completed")
       maybe_create_pr(ticket, workspace)
     end
 
@@ -66,6 +70,9 @@ module SymphonyRuby
       if ticket.labels.include?(pr_label)
         trace "Creating branch and PR for #{ticket.identifier} (has label: #{pr_label})"
         GitManager.new(workspace: workspace, logger: @logger).finalize(ticket)
+        # gh pr create outputs the PR URL — for now, link to repo's PR list
+        pr_list_url = "https://github.com/#{ticket.repository}/pulls"
+        @chat_adapter.pr_created(ticket, pr_list_url)
       else
         trace "Skipping PR creation for #{ticket.identifier} (no label: #{pr_label})"
       end

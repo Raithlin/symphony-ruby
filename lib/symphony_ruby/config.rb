@@ -7,8 +7,9 @@ module SymphonyRuby
     Workspace = Data.define(:root, :clone_from)
     Agent = Data.define(:command, :max_concurrent_agents, :model, :provider, :extra_env, :pr_label)
     Hooks = Data.define(:after_create)
+    Chat = Data.define(:discord, :telegram)
 
-    attr_reader :github, :ticket, :workspace, :agent, :hooks, :poll_interval, :prompt_template
+    attr_reader :github, :ticket, :workspace, :agent, :hooks, :chat, :poll_interval, :prompt_template
 
     def self.load(path)
       text = File.read(path)
@@ -59,6 +60,12 @@ module SymphonyRuby
         pr_label: agent_raw[:pr_label]
       )
       @hooks = Hooks.new(after_create: hooks_raw[:after_create])
+      chat_raw = @raw[:chat] || {}
+      @chat = Chat.new(
+        discord: symbolize(chat_raw[:discord])&.transform_values { |v| resolve_env(v.to_s) },
+        telegram: symbolize(chat_raw[:telegram])&.transform_values { |v| resolve_env(v.to_s) }
+      ) if chat_raw.any?
+      @chat ||= Chat.new(discord: nil, telegram: nil)
       @poll_interval = Integer(@raw.fetch(:poll_interval, 1))
       @prompt_template = body.to_s.empty? ? default_prompt : body
     end
