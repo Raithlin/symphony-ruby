@@ -198,9 +198,10 @@ class OrchestratorTest < Minitest::Test
       FileUtils.mkdir_p(File.join(source, "app"))
       File.write(File.join(source, "Gemfile"), "gem 'rails'")
       # Set up as a git repo so clone works
-      system("git init -b main #{Shellwords.escape(source)} > /dev/null 2>&1")
-      system("git -C #{Shellwords.escape(source)} add -A > /dev/null 2>&1")
-      system("git -C #{Shellwords.escape(source)} commit -m init > /dev/null 2>&1")
+      system("git init #{Shellwords.escape(source)} > /dev/null 2>&1") && \
+        system("git -C #{Shellwords.escape(source)} add -A > /dev/null 2>&1") && \
+        system("git -C #{Shellwords.escape(source)} commit --allow-empty -m init > /dev/null 2>&1") || \
+        flunk("source repo setup failed")
 
       workflow = File.join(dir, "WORKFLOW.md")
       File.write(workflow, <<~MARKDOWN)
