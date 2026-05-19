@@ -1,0 +1,57 @@
+# Dependencies
+/.bundle/
+/vendor/bundle/
+
+# Build artifacts
+*.gem
+/pkg/
+
+# Temporary files
+/log/
+/tmp/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Editor / IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Ruby version managers
+.ruby-version
+.ruby-gemset
+
+# Test artifacts
+/coverage/
+.rspec_status
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+.directory
+.Trash-*
+
+# GitHub (keep workflows and PR template)
+.github/*
+!.github/pull_request_template.md
+!.github/workflows/
+
+# Symphony Ruby agent artifacts
+PROMPT.md
+events.log
+.pi-sessions/
+node_modules/
+
+# Miscellaneous
+*.bak
+*.orig
