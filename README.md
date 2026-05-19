@@ -129,6 +129,13 @@ agent:
   env:
     EXTRA_FLAG: enabled
 poll_interval: 30
+chat:
+  # Optional: Discord and/or Telegram notifications
+  discord:
+    webhook_url: $DISCORD_WEBHOOK_URL
+  telegram:
+    bot_token: $TELEGRAM_BOT_TOKEN
+    chat_id: "-1001234567890"
 ---
 You are working on {{ ticket.identifier }} for NomadNest.
 
@@ -221,6 +228,38 @@ If both `github.token`/`GITHUB_TOKEN` and `gh auth token` are unavailable, live 
 ```bash
 rake test
 ```
+
+### Chat notifications (optional)
+
+Symphony Ruby can send notifications to Discord and/or Telegram when tickets are claimed, agents start/finish, and PRs are created.
+
+Add a `chat:` section to `WORKFLOW.md`:
+
+```yaml
+chat:
+  discord:
+    webhook_url: $DISCORD_WEBHOOK_URL
+  telegram:
+    bot_token: $TELEGRAM_BOT_TOKEN
+    chat_id: "-1001234567890"
+```
+
+Discord uses webhooks (one URL per channel). Telegram uses a bot token and chat ID. Both can be configured simultaneously, or just one. Omit the entire `chat:` section to run without notifications.
+
+**Environment variables:**
+- `DISCORD_WEBHOOK_URL` — Discord webhook URL (from Server Settings → Integrations → Webhooks)
+- `TELEGRAM_BOT_TOKEN` — Telegram bot token (from @BotFather)
+
+**Notification flow:**
+| Event | What's sent |
+|-------|------------|
+| Ticket claimed | Rich embed with title, repo, status |
+| Agent started | "🚀 Agent started for #42" |
+| Agent finished | ✅ or ❌ with last 10 lines of output |
+| PR created | "🔀 PR for #42: link" |
+| No ready tickets | "💤 No ready tickets found" |
+
+**Coming next:** Implementations for `DiscordAdapter` (webhook-based) and `TelegramAdapter` (bot API). The common `ChatAdapter` interface is ready — these adapters just need to implement `send_message` and `send_rich_message`.
 
 ## Current scope
 
