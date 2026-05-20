@@ -114,7 +114,9 @@ class ChatAdapterTest < Minitest::Test
         agent: { command: "true" }
         chat:
           discord:
-            webhook_url: $DISCORD_WEBHOOK
+            bot_token: $DISCORD_BOT_TOKEN
+            channel_id: "1234567890"
+            allowed_role_ids: ["9876543210"]
           telegram:
             bot_token: $TELEGRAM_BOT_TOKEN
             chat_id: "-1001234567890"
@@ -122,17 +124,19 @@ class ChatAdapterTest < Minitest::Test
         Ticket {{ ticket.identifier }}
       MARKDOWN
 
-      ENV["DISCORD_WEBHOOK"] = "https://discord.com/api/webhooks/test/url"
+      ENV["DISCORD_BOT_TOKEN"] = "test-discord-token"
       ENV["TELEGRAM_BOT_TOKEN"] = "test-telegram-token"
       config = SymphonyRuby::Config.load(workflow)
 
       assert config.chat.discord
-      assert_equal "https://discord.com/api/webhooks/test/url", config.chat.discord[:webhook_url]
+      assert_equal "test-discord-token", config.chat.discord[:bot_token]
+      assert_equal "1234567890", config.chat.discord[:channel_id]
+      assert_equal ["9876543210"], config.chat.discord[:allowed_role_ids]
       assert config.chat.telegram
       assert_equal "test-telegram-token", config.chat.telegram[:bot_token]
       assert_equal "-1001234567890", config.chat.telegram[:chat_id]
     ensure
-      ENV.delete("DISCORD_WEBHOOK")
+      ENV.delete("DISCORD_BOT_TOKEN")
       ENV.delete("TELEGRAM_BOT_TOKEN")
     end
   end

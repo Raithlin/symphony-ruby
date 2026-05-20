@@ -11,6 +11,7 @@ module SymphonyRuby
     def initialize(argv)
       @argv = argv.dup
       @once = false
+      @bot = nil
     end
 
     def start
@@ -24,8 +25,13 @@ module SymphonyRuby
       puts "[symphony-ruby] Workspace root: #{config.workspace.root}"
       puts "[symphony-ruby] Agent: provider=#{config.agent.provider} model=#{config.agent.model} max_concurrent=#{config.agent.max_concurrent_agents}"
       tracker = tracker_for(config)
-      orchestrator = Orchestrator.new(config: config, tracker: tracker)
-      @once ? orchestrator.run_once : orchestrator.run_forever
+
+      if @bot
+        start_bot(config, tracker)
+      else
+        orchestrator = Orchestrator.new(config: config, tracker: tracker)
+        @once ? orchestrator.run_once : orchestrator.run_forever
+      end
       0
     rescue OptionParser::ParseError, ArgumentError => error
       warn "symphony-ruby: #{error.message}"
@@ -35,10 +41,23 @@ module SymphonyRuby
 
     private
 
+    def start_bot(config, tracker)
+      case @bot
+      when "discord"
+        puts "[symphony-ruby] Starting Discord bot…"
+        DiscordBot.new(config: config, tracker: tracker).start
+      else
+        raise ArgumentError, "Unknown bot type: #{@bot}"
+      end
+    rescue Interrupt
+      puts "\n[symphony-ruby] Bot stopped."
+    end
+
     def parser
       @parser ||= OptionParser.new do |opts|
         opts.banner = "Usage: symphony-ruby [WORKFLOW.md] [options]"
         opts.on("--once", "Poll once and exit") { @once = true }
+        opts.on("--bot TYPE", "Run as a chat bot (discord)") { |type| @bot = type }
         opts.on("--version", "Print version") do
           puts VERSION
           exit 0
