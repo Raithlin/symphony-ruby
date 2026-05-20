@@ -41,8 +41,12 @@ module SymphonyRuby
 
       clone_source = @config.workspace.clone_from
       if first_create && clone_source
-        trace "Cloning #{clone_source} into workspace #{workspace_name}"
-        run_shell("git clone #{Shellwords.escape(clone_source)} .", workspace, {})
+        begin
+          trace "Cloning #{clone_source} into workspace #{workspace_name}"
+          run_shell("git clone #{Shellwords.escape(clone_source)} .", workspace, {})
+        rescue => e
+          trace "Clone failed (continuing): #{e.message}"
+        end
       end
 
       env = env_for(ticket, workspace, prompt_file)
