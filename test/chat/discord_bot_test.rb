@@ -56,25 +56,27 @@ class DiscordBotTest < Minitest::Test
       MARKDOWN
       config = SymphonyRuby::Config.load(workflow)
 
-      assert_raises(ArgumentError, /Missing chat.discord/) do
+      error = assert_raises(ArgumentError) do
         SymphonyRuby::DiscordBot.new(
           config: config,
           tracker: FakeTracker.new([], []),
           logger: StringIO.new
         )
       end
+      assert_match(/Missing chat.discord/, error.message)
     end
   end
 
   def test_raises_when_channel_id_is_missing
     build_config(channel_id: nil) do |config|
-      assert_raises(ArgumentError, /channel_id is required/) do
+      error = assert_raises(ArgumentError) do
         SymphonyRuby::DiscordBot.new(
           config: config,
           tracker: FakeTracker.new([], []),
           logger: StringIO.new
         )
       end
+      assert_match(/channel_id is required/, error.message)
     end
   end
 
