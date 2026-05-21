@@ -22,6 +22,7 @@ module SymphonyRuby
       puts "[symphony-ruby] GitHub project: owner=#{config.github.owner} owner_type=#{config.github.owner_type} project_number=#{config.github.project_number}"
       puts "[symphony-ruby] GitHub token source: #{config.github.token_source}#{config.github.token.empty? ? " (empty)" : ""}"
       puts "[symphony-ruby] Ticket filter: #{config.ticket.status_field}=#{config.ticket.ready_status}"
+      puts "[symphony-ruby] Ticket assignee filter: current user only" if config.ticket.assigned_to_current_user_only
       puts "[symphony-ruby] Workspace root: #{config.workspace.root}"
       puts "[symphony-ruby] Agent: provider=#{config.agent.provider} model=#{config.agent.model} max_concurrent=#{config.agent.max_concurrent_agents}"
       tracker = tracker_for(config)

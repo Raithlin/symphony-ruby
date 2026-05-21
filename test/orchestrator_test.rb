@@ -3,13 +3,17 @@ require "stringio"
 require "shellwords"
 
 class OrchestratorTest < Minitest::Test
-  FakeTracker = Struct.new(:tickets, :marked) do
+  FakeTracker = Struct.new(:tickets, :marked, :clarifications) do
     def fetch_ready_tickets
       tickets
     end
 
     def mark_in_progress(ticket)
       marked << ticket.id
+    end
+
+    def request_clarification(ticket, body)
+      clarifications << [ticket.id, body]
     end
   end
 
@@ -69,6 +73,72 @@ class OrchestratorTest < Minitest::Test
       SymphonyRuby::Orchestrator.new(config: config, tracker: FakeTracker.new([ticket], [])).run_once
 
       assert_equal "Ticket NN-43\n", File.read(File.join(dir, "workspaces", "NN-43", "PROMPT.md"))
+    end
+  end
+
+  def test_agent_can_request_clarification_via_file
+    Dir.mktmpdir do |dir|
+      workflow = File.join(dir, "WORKFLOW.md")
+      File.write(workflow, <<~MARKDOWN)
+        ---
+        github: { owner: nomadnest, project_number: 7, token: token }
+        ticket:
+          needs_clarification_status: Needs clarification
+        workspace: { root: #{dir}/workspaces }
+        agent:
+          command: |
+            echo 'Which billing provider should we use?' > "$SYMPHONY_CLARIFICATION_FILE"
+          max_concurrent_agents: 1
+          pr_label: auto-pr
+        ---
+        Ticket {{ ticket.identifier }}
+      MARKDOWN
+      config = SymphonyRuby::Config.load(workflow)
+      ticket = SymphonyRuby::Ticket.new(
+        id: "PVTI_8", content_id: "ISSUE_8", identifier: "#101", title: "Needs details",
+        body: "Body", url: "http://example", status: "Ready",
+        repository: "nomadnest/app", fields: {}, labels: ["auto-pr"]
+      )
+      tracker = FakeTracker.new([ticket], [], [])
+      output = StringIO.new
+
+      SymphonyRuby::Orchestrator.new(config: config, tracker: tracker, logger: output).run_once
+
+      assert_equal ["PVTI_8"], tracker.marked
+      assert_equal [["PVTI_8", "Which billing provider should we use?"]], tracker.clarifications
+      refute_includes output.string, "Creating branch and PR"
+      assert_includes output.string, "Clarification requested for #101"
+    end
+  end
+
+  def test_stale_clarification_file_is_ignored_on_next_run
+    Dir.mktmpdir do |dir|
+      workspace = File.join(dir, "workspaces", "102")
+      FileUtils.mkdir_p(workspace)
+      File.write(File.join(workspace, "CLARIFICATION_REQUEST.md"), "Old question?")
+
+      workflow = File.join(dir, "WORKFLOW.md")
+      File.write(workflow, <<~MARKDOWN)
+        ---
+        github: { owner: nomadnest, project_number: 7, token: token }
+        workspace: { root: #{dir}/workspaces }
+        agent:
+          command: "true"
+          max_concurrent_agents: 1
+        ---
+        Ticket {{ ticket.identifier }}
+      MARKDOWN
+      config = SymphonyRuby::Config.load(workflow)
+      ticket = SymphonyRuby::Ticket.new(
+        id: "PVTI_9", content_id: "ISSUE_9", identifier: "#102", title: "Answered",
+        body: "Body", url: "http://example", status: "Ready",
+        repository: "nomadnest/app", fields: {}, labels: []
+      )
+      tracker = FakeTracker.new([ticket], [], [])
+
+      SymphonyRuby::Orchestrator.new(config: config, tracker: tracker, logger: StringIO.new).run_once
+
+      assert_empty tracker.clarifications
     end
   end
 

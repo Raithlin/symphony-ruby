@@ -57,12 +57,20 @@ module SymphonyRuby
         trace "Skipping after_create hook for existing workspace #{ticket.identifier}"
       end
       File.write(prompt_file, @config.render_prompt(ticket: ticket))
+      FileUtils.rm_f(clarification_file(prompt_file))
       trace "Prompt: #{prompt_file}"
       @tracker.mark_in_progress(ticket)
       @chat_adapter.ticket_claimed(ticket)
       @chat_adapter.agent_started(ticket)
       trace "Launching agent for #{ticket.identifier}"
       run_shell(@config.agent.command, workspace, env)
+      if (clarification = clarification_request(prompt_file))
+        trace "Clarification requested for #{ticket.identifier}"
+        @tracker.request_clarification(ticket, clarification)
+        @chat_adapter.agent_finished(ticket, true, "Agent requested clarification")
+        return
+      end
+
       @chat_adapter.agent_finished(ticket, true, "Agent completed")
       maybe_create_pr(ticket, workspace)
     end
@@ -91,9 +99,22 @@ module SymphonyRuby
         "SYMPHONY_TICKET_REPOSITORY" => ticket.repository,
         "SYMPHONY_WORKSPACE" => workspace,
         "SYMPHONY_PROMPT_FILE" => prompt_file,
+        "SYMPHONY_CLARIFICATION_FILE" => clarification_file(prompt_file),
         "SYMPHONY_MODEL" => @config.agent.model.to_s,
         "SYMPHONY_PROVIDER" => @config.agent.provider.to_s
       )
+    end
+
+    def clarification_request(prompt_file)
+      path = clarification_file(prompt_file)
+      return nil unless File.exist?(path)
+
+      body = File.read(path).strip
+      body.empty? ? nil : body
+    end
+
+    def clarification_file(prompt_file)
+      File.join(File.dirname(prompt_file), "CLARIFICATION_REQUEST.md")
     end
 
     def run_shell(command, chdir, env)

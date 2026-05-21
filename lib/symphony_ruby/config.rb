@@ -3,7 +3,7 @@
 module SymphonyRuby
   class Config
     Github = Data.define(:owner, :project_number, :token, :owner_type, :token_source)
-    TicketConfig = Data.define(:status_field, :ready_status, :in_progress_status, :terminal_statuses)
+    TicketConfig = Data.define(:status_field, :ready_status, :in_progress_status, :terminal_statuses, :assigned_to_current_user_only, :needs_clarification_status)
     Workspace = Data.define(:root, :clone_from)
     Agent = Data.define(:command, :max_concurrent_agents, :model, :provider, :extra_env, :pr_label)
     Hooks = Data.define(:after_create)
@@ -45,7 +45,9 @@ module SymphonyRuby
         status_field: ticket_raw.fetch(:status_field, "Status"),
         ready_status: ticket_raw.fetch(:ready_status, "Ready"),
         in_progress_status: ticket_raw.fetch(:in_progress_status, "In Progress"),
-        terminal_statuses: Array(ticket_raw.fetch(:terminal_statuses, %w[Done Closed Cancelled Duplicate]))
+        terminal_statuses: Array(ticket_raw.fetch(:terminal_statuses, %w[Done Closed Cancelled Duplicate])),
+        assigned_to_current_user_only: truthy?(ticket_raw.fetch(:assigned_to_current_user_only, false)),
+        needs_clarification_status: ticket_raw.fetch(:needs_clarification_status, "Needs clarification")
       )
       @workspace = Workspace.new(
         root: expand_path(required(workspace_raw, :root, "workspace.root")),
@@ -181,6 +183,15 @@ module SymphonyRuby
 
     def stringify_hash(value)
       value.to_h { |key, val| [key.to_s, val] }
+    end
+
+    def truthy?(value)
+      case value
+      when true then true
+      when false, nil then false
+      else
+        %w[true yes 1].include?(value.to_s.downcase)
+      end
     end
   end
 end

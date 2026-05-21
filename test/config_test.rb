@@ -13,6 +13,8 @@ class ConfigTest < Minitest::Test
         ticket:
           status_field: Status
           ready_status: Ready
+          assigned_to_current_user_only: true
+          needs_clarification_status: Needs clarification
           terminal_statuses: [Done, Closed]
         workspace:
           root: #{dir}/workspaces
@@ -30,6 +32,8 @@ class ConfigTest < Minitest::Test
       assert_equal "secret-token", config.github.token
       assert_equal "Status", config.ticket.status_field
       assert_equal "Ready", config.ticket.ready_status
+      assert_equal true, config.ticket.assigned_to_current_user_only
+      assert_equal "Needs clarification", config.ticket.needs_clarification_status
       assert_equal ["Done", "Closed"], config.ticket.terminal_statuses
       assert_equal File.join(dir, "workspaces"), config.workspace.root
       assert_equal 2, config.agent.max_concurrent_agents
