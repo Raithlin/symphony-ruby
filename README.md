@@ -60,6 +60,8 @@ ticket:
   status_field: Status
   ready_status: Ready
   in_progress_status: In Progress
+  needs_clarification_status: Needs clarification
+  assigned_to_current_user_only: false # optional — only pick tickets assigned to the token viewer
 workspace:
   root: ~/source/nomadnest-agent-runs
   clone_from: ~/source/nomadnest   # optional
@@ -85,6 +87,11 @@ URL: {{ ticket.url }}
 
 {{ ticket.body }}
 ```
+
+Agents can pause work for human input by writing questions to
+`$SYMPHONY_CLARIFICATION_FILE`. When that file is non-empty after the agent
+exits, symphony-ruby comments the questions on the issue/PR, moves the project
+item to `ticket.needs_clarification_status`, and skips PR creation for that run.
 
 Full reference: [docs/configuration.md](docs/configuration.md). Agent examples: [docs/agents.md](docs/agents.md). Discord bot: [docs/discord-bot.md](docs/discord-bot.md).
 

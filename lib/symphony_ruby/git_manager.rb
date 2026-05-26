@@ -15,7 +15,8 @@ module SymphonyRuby
       commit_all(ticket)
       branch_name = branch_name_for(ticket)
       create_branch(branch_name)
-      push_branch(branch_name)
+      remote = push_remote(ticket)
+      push_branch(remote, branch_name)
       create_pr(ticket, branch_name)
       true
     end
@@ -47,15 +48,53 @@ module SymphonyRuby
       run("git", "checkout", "-b", branch_name)
     end
 
-    def push_branch(branch_name)
-      run("git", "push", "-u", "origin", branch_name)
+    def push_branch(remote, branch_name)
+      run("git", "push", "-u", remote, branch_name)
     end
 
     def create_pr(ticket, branch_name)
-      run("gh", "pr", "create",
-          "--title", ticket.body.empty? ? ticket.title : ticket.title,
-          "--body", pr_body(ticket),
-          "--base", "main")
+      args = ["gh", "pr", "create",
+              "--title", ticket.title,
+              "--body", pr_body(ticket),
+              "--base", "main",
+              "--head", branch_name]
+      args += ["--repo", ticket.repository] if github_repository?(ticket.repository)
+
+      run(*args)
+    end
+
+    def push_remote(ticket)
+      return "origin" if github_remote?(remote_url("origin"))
+
+      return "origin" unless github_repository?(ticket.repository)
+
+      ensure_remote("symphony-pr", "git@github.com:#{ticket.repository}.git")
+      "symphony-pr"
+    end
+
+    def ensure_remote(name, url)
+      existing_url = remote_url(name)
+
+      if existing_url.nil?
+        run("git", "remote", "add", name, url)
+      elsif existing_url != url
+        run("git", "remote", "set-url", name, url)
+      end
+    end
+
+    def remote_url(name)
+      stdout, _stderr, status = Open3.capture3("git", "remote", "get-url", name, chdir: @workspace)
+      return nil unless status.success?
+
+      stdout.strip
+    end
+
+    def github_remote?(url)
+      url.to_s.match?(%r{\A(?:git@|https://|ssh://git@)github\.com[:/]})
+    end
+
+    def github_repository?(repository)
+      repository.to_s.match?(%r{\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\z})
     end
 
     def commit_message(ticket)

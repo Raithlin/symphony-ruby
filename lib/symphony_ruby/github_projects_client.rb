@@ -12,8 +12,8 @@ module SymphonyRuby
             id
             content {
               __typename
-              ... on Issue { id number title body url repository { nameWithOwner } labels(first: 20) { nodes { name } } }
-              ... on PullRequest { id number title body url repository { nameWithOwner } labels(first: 20) { nodes { name } } }
+              ... on Issue { id number title body url repository { nameWithOwner } labels(first: 20) { nodes { name } } assignees(first: 20) { nodes { login } } }
+              ... on PullRequest { id number title body url repository { nameWithOwner } labels(first: 20) { nodes { name } } assignees(first: 20) { nodes { login } } }
               ... on DraftIssue { id title body }
             }
             fieldValues(first: 30) {
@@ -102,14 +102,23 @@ module SymphonyRuby
       }
     GRAPHQL
 
+    ADD_COMMENT_MUTATION = <<~GRAPHQL
+      mutation($subjectId: ID!, $body: String!) {
+        addComment(input: { subjectId: $subjectId, body: $body }) {
+          commentEdge { node { id } }
+        }
+      }
+    GRAPHQL
+
     def initialize(token:, http: nil, logger: nil)
       @token = token
       @http = http || method(:default_http)
       @logger = logger
     end
 
-    def fetch_tickets(owner:, project_number:, status_field:, ready_status:, owner_type: "organization")
+    def fetch_tickets(owner:, project_number:, status_field:, ready_status:, owner_type: "organization", assigned_to_current_user_only: false)
       query, root_key = query_for(owner_type)
+      viewer_login = current_viewer_login if assigned_to_current_user_only
 
       tickets = []
       cursor = nil
@@ -121,6 +130,7 @@ module SymphonyRuby
           fields = fields_for(node)
           trace "Project item #{node.fetch("id")} status=#{fields[status_field].inspect} title=#{node.dig("content", "title").inspect}"
           next unless fields[status_field] == ready_status
+          next if assigned_to_current_user_only && !assigned_to?(node, viewer_login)
 
           tickets << ticket_for(node, fields, status_field)
         end
@@ -152,6 +162,25 @@ module SymphonyRuby
         status_value: in_progress_status
       )
       trace "Moving #{ticket.identifier} to #{status_field}=#{in_progress_status}"
+      graphql(UPDATE_PROJECT_STATUS_MUTATION, projectId: project_id, itemId: ticket.id, fieldId: field_id, optionId: option_id)
+    end
+
+    def request_clarification(ticket, body, owner:, owner_type:, project_number:, status_field:, needs_clarification_status:)
+      if ticket.content_id.to_s.empty?
+        trace "Skipping clarification comment for #{ticket.identifier}: project item has no commentable content id"
+      else
+        trace "Commenting clarification request on #{ticket.identifier}"
+        graphql(ADD_COMMENT_MUTATION, subjectId: ticket.content_id, body: clarification_comment(body))
+      end
+
+      project_id, field_id, option_id = status_field_ids(
+        owner: owner,
+        owner_type: owner_type,
+        project_number: project_number,
+        status_field: status_field,
+        status_value: needs_clarification_status
+      )
+      trace "Moving #{ticket.identifier} to #{status_field}=#{needs_clarification_status}"
       graphql(UPDATE_PROJECT_STATUS_MUTATION, projectId: project_id, itemId: ticket.id, fieldId: field_id, optionId: option_id)
     end
 
@@ -194,6 +223,24 @@ module SymphonyRuby
 
     def trace(message)
       @logger&.puts "[symphony-ruby] #{message}"
+    end
+
+    def current_viewer_login
+      viewer = graphql(VIEWER_QUERY, {})
+      viewer.dig("viewer", "login").to_s
+    end
+
+    def assigned_to?(node, login)
+      assignees = Array(node.dig("content", "assignees", "nodes"))
+      assignees.any? { |assignee| assignee["login"].to_s.casecmp?(login) }
+    end
+
+    def clarification_comment(body)
+      <<~COMMENT.strip
+        **Symphony needs clarification before continuing:**
+
+        #{body}
+      COMMENT
     end
 
     def graphql(query, variables)
@@ -256,7 +303,8 @@ module SymphonyRuby
         project_number: @config.github.project_number,
         status_field: @config.ticket.status_field,
         ready_status: @config.ticket.ready_status,
-        owner_type: @config.github.owner_type
+        owner_type: @config.github.owner_type,
+        assigned_to_current_user_only: @config.ticket.assigned_to_current_user_only
       )
     end
 
@@ -268,6 +316,18 @@ module SymphonyRuby
         project_number: @config.github.project_number,
         status_field: @config.ticket.status_field,
         in_progress_status: @config.ticket.in_progress_status
+      )
+    end
+
+    def request_clarification(ticket, body)
+      @client.request_clarification(
+        ticket,
+        body,
+        owner: @config.github.owner,
+        owner_type: @config.github.owner_type,
+        project_number: @config.github.project_number,
+        status_field: @config.ticket.status_field,
+        needs_clarification_status: @config.ticket.needs_clarification_status
       )
     end
   end

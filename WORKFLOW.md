@@ -9,6 +9,9 @@ ticket:
   status_field: Status
   ready_status: Ready
   in_progress_status: In Progress
+  needs_clarification_status: Needs clarification
+  # Optional: only pick Ready issues/PRs assigned to the authenticated GitHub user.
+  # assigned_to_current_user_only: true
   terminal_statuses: [Done, Closed, Cancelled, Duplicate]
 workspace:
   root: ~/source/nomadnest-agent-runs
@@ -39,5 +42,7 @@ Model: {{ agent.model }}
 
 Description:
 {{ ticket.body }}
+
+If you need human clarification before continuing, write your questions to the file at `$SYMPHONY_CLARIFICATION_FILE` and exit. Symphony will comment those questions on the ticket and move it to Needs clarification.
 
 Follow the repository instructions, create tests first for code changes, and leave a concise summary of the work performed.

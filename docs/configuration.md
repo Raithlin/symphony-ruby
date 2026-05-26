@@ -18,6 +18,8 @@ ticket:
   status_field: Status            # project field to read/write status
   ready_status: Ready             # value that means "ready to run"
   in_progress_status: In Progress # value set when claiming a ticket
+  needs_clarification_status: Needs clarification # value set when agent asks a human question
+  assigned_to_current_user_only: false # only pick tickets assigned to the GitHub token viewer
   terminal_statuses:              # statuses that mean "done"
     - Done
     - Closed
@@ -75,6 +77,8 @@ Repository: {{ ticket.repository }}
 | `ticket.status_field` | string | No | `Status` | Project field name for status |
 | `ticket.ready_status` | string | No | `Ready` | Value that means "ready to run" |
 | `ticket.in_progress_status` | string | No | `In Progress` | Value set when claiming |
+| `ticket.needs_clarification_status` | string | No | `Needs clarification` | Value set when the agent requests human input |
+| `ticket.assigned_to_current_user_only` | boolean | No | `false` | When true, only pick ready issues/PRs assigned to the current GitHub token viewer |
 | `ticket.terminal_statuses` | array | No | `[Done, Closed, Cancelled, Duplicate]` | Statuses treated as done |
 | `workspace.root` | string | Yes | — | Directory for per-ticket workspaces |
 | `workspace.clone_from` | string | No | — | Git repo to clone into each workspace |
@@ -126,6 +130,7 @@ The orchestrator sets these before running `agent.command`:
 | `SYMPHONY_PROVIDER` | `agent.provider` |
 | `SYMPHONY_MODEL` | `agent.model` |
 | `SYMPHONY_PROMPT_FILE` | Path to the rendered `PROMPT.md` |
+| `SYMPHONY_CLARIFICATION_FILE` | Path the agent can write questions to when it needs human input |
 | `SYMPHONY_WORKSPACE` | Workspace directory path |
 | `SYMPHONY_TICKET_ID` | Ticket identifier (e.g., `#42`) |
 | `SYMPHONY_TICKET_PROJECT_ITEM_ID` | GitHub Projects v2 item ID |
@@ -134,6 +139,20 @@ The orchestrator sets these before running `agent.command`:
 | `SYMPHONY_TICKET_REPOSITORY` | Repository (e.g., `owner/repo`) |
 
 Plus anything in `agent.env`.
+
+## Clarification requests
+
+If an agent cannot continue without human input, it can write one or more
+questions to `$SYMPHONY_CLARIFICATION_FILE` and then exit. After `agent.command`
+returns, symphony-ruby reads that file. If it contains non-blank text,
+symphony-ruby:
+
+1. Adds a comment to the issue or PR with the clarification request
+2. Moves the project item to `ticket.needs_clarification_status`
+3. Stops processing that ticket for the current run and skips auto-PR creation
+
+After a human answers the issue comment, move the project item back to
+`ticket.ready_status` so the next polling loop can pick it up again.
 
 ## Trace output (`--once`)
 
